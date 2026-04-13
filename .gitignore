@@ -1,0 +1,10 @@
+# Frontend
+meetingmind-frontend/.next/
+meetingmind-frontend/node_modules/
+meetingmind-frontend/.env.local
+
+# Backend
+meetingmind-backend/venv/
+meetingmind-backend/__pycache__/
+meetingmind-backend/*.pyc
+meetingmind-backend/.env
