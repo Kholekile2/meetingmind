@@ -2,13 +2,16 @@
 # Upload a meeting, get all meetings for a user
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from typing import Optional
 from database import get_db
 from datetime import datetime, timezone
 from bson import ObjectId
+from ai_processor import process_transcript
 import cloudinary
 import cloudinary.uploader
 import os
+import asyncio
 
 router = APIRouter()
 
@@ -20,11 +23,46 @@ cloudinary.config(
 )
 
 def format_meeting(meeting: dict) -> dict:
-    # MongoDB uses "_id" but we expose it as "id" in our API responses
-    # We also convert it to a string because MongoDB IDs are objects, not strings
+    # Convert MongoDB's _id object to a plain string called id
     meeting["id"] = str(meeting["_id"])
     del meeting["_id"]
     return meeting
+
+async def process_meeting_ai(meeting_id: str, transcript: str):
+    # This function runs in the background after a meeting is uploaded
+    # It calls Gemini, gets the results, and saves them to MongoDB
+
+    db = get_db()
+
+    try:
+        # Update status to processing so the user knows AI is working
+        await db.meetings.update_one(
+            {"_id": ObjectId(meeting_id)},
+            {"$set": {"status": "processing"}}
+        )
+
+        # Send transcript to Gemini and get back summary, action items, key decisions
+        ai_result = await process_transcript(transcript)
+
+        # Save the AI results to MongoDB and mark as completed
+        await db.meetings.update_one(
+            {"_id": ObjectId(meeting_id)},
+            {"$set": {
+                "status": "completed",
+                "summary": ai_result["summary"],
+                "action_items": ai_result["action_items"],
+                "key_decisions": ai_result["key_decisions"],
+            }}
+        )
+        print(f"AI processing complete for meeting {meeting_id}")
+
+    except Exception as e:
+        # If something goes wrong, mark the meeting as failed
+        print(f"AI processing failed for meeting {meeting_id}: {e}")
+        await db.meetings.update_one(
+            {"_id": ObjectId(meeting_id)},
+            {"$set": {"status": "failed"}}
+        )
 
 @router.post("/meetings/upload")
 async def upload_meeting(
@@ -33,7 +71,6 @@ async def upload_meeting(
     audio_file: Optional[UploadFile] = File(None),
     transcript: Optional[str] = Form(None),
 ):
-    # Make sure the user provided either an audio file or a transcript
     if not audio_file and not transcript:
         raise HTTPException(
             status_code=400,
@@ -49,11 +86,8 @@ async def upload_meeting(
 
     audio_url = None
 
-    # If an audio file was uploaded, send it to Cloudinary for storage
     if audio_file:
         file_contents = await audio_file.read()
-
-        # Upload to Cloudinary - resource_type "video" covers audio files too
         upload_result = cloudinary.uploader.upload(
             file_contents,
             resource_type="video",
@@ -62,12 +96,10 @@ async def upload_meeting(
         )
         audio_url = upload_result.get("secure_url")
 
-    # Build the meeting record to save in MongoDB
     meeting = {
         "user_id": clerk_user_id,
         "title": title,
         "created_at": datetime.now(timezone.utc),
-        # Status starts as "pending" until AI processing is done
         "status": "pending",
         "audio_url": audio_url,
         "transcript": transcript or "",
@@ -77,10 +109,19 @@ async def upload_meeting(
     }
 
     result = await db.meetings.insert_one(meeting)
+    meeting_id = str(result.inserted_id)
+
+    # Get the transcript to process - either pasted text or we'll add audio transcription later
+    transcript_to_process = transcript or ""
+
+    # Start AI processing in the background so the user doesn't have to wait
+    # asyncio.create_task runs process_meeting_ai without blocking the response
+    if transcript_to_process:
+        asyncio.create_task(process_meeting_ai(meeting_id, transcript_to_process))
 
     return {
         "message": "Meeting uploaded successfully",
-        "meeting_id": str(result.inserted_id),
+        "meeting_id": meeting_id,
         "status": "pending"
     }
 
