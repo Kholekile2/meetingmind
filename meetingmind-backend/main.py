@@ -1,14 +1,18 @@
-from fastapi import FastAPI, Header, HTTPException, Request
+# This is the entry point of our FastAPI backend
+# It creates the app, connects to the database, and registers all the routers
+
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-from motor.motor_asyncio import AsyncIOMotorClient
-from svix import Webhook, WebhookVerificationError
-import os
+from database import connect_db, close_db
+from routers import webhooks, meetings
 
+# Load environment variables from .env file
 load_dotenv()
 
 app = FastAPI(title="MeetingMind API")
 
+# Allow our Next.js frontend (localhost:3000) to make requests to this backend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -17,21 +21,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-mongo_client = None
-db = None
-
+# Connect to MongoDB when the server starts
 @app.on_event("startup")
-async def startup_db():
-    global mongo_client, db
-    mongo_client = AsyncIOMotorClient(os.getenv("MONGODB_URL"))
-    db = mongo_client[os.getenv("DB_NAME")]
-    print("Connected to MongoDB Atlas")
+async def startup():
+    await connect_db()
 
+# Close the MongoDB connection when the server stops
 @app.on_event("shutdown")
-async def shutdown_db():
-    global mongo_client
-    if mongo_client:
-        mongo_client.close()
+async def shutdown():
+    await close_db()
+
+# Register routers - this connects all the routes from each router file to the app
+app.include_router(webhooks.router)
+app.include_router(meetings.router)
 
 @app.get("/")
 async def root():
@@ -39,52 +41,9 @@ async def root():
 
 @app.get("/health")
 async def health():
+    from database import get_db
     try:
-        await db.command("ping")
+        await get_db().command("ping")
         return {"status": "healthy", "database": "connected"}
     except Exception as e:
         return {"status": "unhealthy", "database": str(e)}
-
-@app.post("/webhooks/clerk")
-async def clerk_webhook(request: Request):
-    svix_id = request.headers.get("svix-id")
-    svix_timestamp = request.headers.get("svix-timestamp")
-    svix_signature = request.headers.get("svix-signature")
-
-    if not svix_id or not svix_timestamp or not svix_signature:
-        raise HTTPException(status_code=400, detail="Missing webhook headers")
-
-    body = await request.body()
-
-    try:
-        wh = Webhook(os.getenv("CLERK_WEBHOOK_SECRET"))
-        payload = wh.verify(body, {
-            "svix-id": svix_id,
-            "svix-timestamp": svix_timestamp,
-            "svix-signature": svix_signature,
-        })
-    except WebhookVerificationError:
-        raise HTTPException(status_code=400, detail="Invalid webhook signature")
-
-    event_type = payload.get("type")
-
-    if event_type == "user.created":
-        data = payload.get("data", {})
-        clerk_id = data.get("id")
-        email_addresses = data.get("email_addresses", [])
-        email = email_addresses[0].get("email_address", "") if email_addresses else ""        
-        first_name = data.get("first_name", "")
-        last_name = data.get("last_name", "")
-        name = f"{first_name} {last_name}".strip()
-
-        existing_user = await db.users.find_one({"clerk_id": clerk_id})
-        if not existing_user:
-            await db.users.insert_one({
-                "clerk_id": clerk_id,
-                "email": email,
-                "name": name,
-                "created_at": data.get("created_at")
-            })
-            print(f"New user saved: {email}")
-
-    return {"status": "ok"}
