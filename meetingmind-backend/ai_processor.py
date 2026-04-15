@@ -38,7 +38,7 @@ Meeting transcript:
     try:
         # Send the prompt to Gemini and wait for the response
         response = client.models.generate_content(
-            model="models/gemini-2.0-flash-lite",
+            model="models/gemini-2.5-flash",
             contents=prompt
         )
 
