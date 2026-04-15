@@ -55,9 +55,10 @@ export default async function DashboardPage() {
         ) : (
           <div className="grid gap-4">
             {meetings.map((meeting: any) => (
-              <div
+              <Link
                 key={meeting.id}
-                className="bg-white rounded-xl shadow-sm border border-gray-100 p-6"
+                href={`/meetings/${meeting.id || meeting._id}`}
+                className="block bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:border-blue-300 hover:shadow-md transition"
               >
                 <div className="flex items-start justify-between">
                   <div>
@@ -86,7 +87,7 @@ export default async function DashboardPage() {
                     {meeting.summary}
                   </p>
                 )}
-              </div>
+              </Link>
             ))}
           </div>
         )}

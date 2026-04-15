@@ -139,3 +139,22 @@ async def get_meetings(clerk_user_id: str):
         meetings.append(format_meeting(meeting))
 
     return meetings
+
+@router.get("/meetings/{meeting_id}")
+async def get_meeting(meeting_id: str, clerk_user_id: str):
+    db = get_db()
+
+    try:
+        # Convert the string meeting_id back to a MongoDB ObjectId
+        meeting = await db.meetings.find_one({
+            "_id": ObjectId(meeting_id),
+            # Also check the user owns this meeting for security
+            "user_id": clerk_user_id
+        })
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid meeting ID")
+
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    return format_meeting(meeting)
