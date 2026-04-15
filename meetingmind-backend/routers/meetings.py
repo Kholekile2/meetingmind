@@ -1,8 +1,7 @@
 # This file handles all meeting-related endpoints
-# Upload a meeting, get all meetings for a user
+# Upload a meeting, get all meetings, get a single meeting, and chat with a meeting
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
-from fastapi.concurrency import run_in_threadpool
 from typing import Optional
 from database import get_db
 from datetime import datetime, timezone
@@ -30,8 +29,6 @@ def format_meeting(meeting: dict) -> dict:
 
 async def process_meeting_ai(meeting_id: str, transcript: str):
     # This function runs in the background after a meeting is uploaded
-    # It calls Gemini, gets the results, and saves them to MongoDB
-
     db = get_db()
 
     try:
@@ -57,7 +54,6 @@ async def process_meeting_ai(meeting_id: str, transcript: str):
         print(f"AI processing complete for meeting {meeting_id}")
 
     except Exception as e:
-        # If something goes wrong, mark the meeting as failed
         print(f"AI processing failed for meeting {meeting_id}: {e}")
         await db.meetings.update_one(
             {"_id": ObjectId(meeting_id)},
@@ -111,11 +107,9 @@ async def upload_meeting(
     result = await db.meetings.insert_one(meeting)
     meeting_id = str(result.inserted_id)
 
-    # Get the transcript to process - either pasted text or we'll add audio transcription later
     transcript_to_process = transcript or ""
 
-    # Start AI processing in the background so the user doesn't have to wait
-    # asyncio.create_task runs process_meeting_ai without blocking the response
+    # Start AI processing in the background
     if transcript_to_process:
         asyncio.create_task(process_meeting_ai(meeting_id, transcript_to_process))
 
@@ -145,10 +139,8 @@ async def get_meeting(meeting_id: str, clerk_user_id: str):
     db = get_db()
 
     try:
-        # Convert the string meeting_id back to a MongoDB ObjectId
         meeting = await db.meetings.find_one({
             "_id": ObjectId(meeting_id),
-            # Also check the user owns this meeting for security
             "user_id": clerk_user_id
         })
     except Exception:
@@ -158,3 +150,112 @@ async def get_meeting(meeting_id: str, clerk_user_id: str):
         raise HTTPException(status_code=404, detail="Meeting not found")
 
     return format_meeting(meeting)
+
+@router.post("/meetings/{meeting_id}/chat")
+async def chat_with_meeting(
+    meeting_id: str,
+    clerk_user_id: str = Form(...),
+    message: str = Form(...),
+):
+    db = get_db()
+
+    # Fetch the meeting to get the transcript as context for Gemini
+    try:
+        meeting = await db.meetings.find_one({
+            "_id": ObjectId(meeting_id),
+            "user_id": clerk_user_id
+        })
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid meeting ID")
+
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    if not meeting.get("transcript"):
+        raise HTTPException(status_code=400, detail="Meeting has no transcript to chat with")
+
+    # Fetch previous chat messages to give Gemini conversation context
+    previous_messages = await db.chat_messages.find(
+        {"meeting_id": meeting_id}
+    ).sort("created_at", 1).to_list(length=20)
+
+    # Build conversation history string
+    conversation_history = ""
+    for msg in previous_messages:
+        role = "User" if msg["role"] == "user" else "Assistant"
+        conversation_history += f"{role}: {msg['content']}\n"
+
+    # Build the prompt with transcript as context
+    prompt = f"""You are a helpful assistant that answers questions about a meeting.
+You must only answer based on the meeting transcript provided below.
+If the answer is not in the transcript, say so honestly.
+
+Meeting transcript:
+{meeting['transcript']}
+
+Previous conversation:
+{conversation_history}
+
+User question: {message}
+
+Answer the question clearly and concisely based on the transcript."""
+
+    try:
+        from google import genai
+        client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+        response = client.models.generate_content(
+            model="models/gemini-2.5-flash",
+            contents=prompt
+        )
+        ai_response = response.text.strip()
+    except Exception as e:
+        print(f"Chat error: {e}")
+        raise HTTPException(status_code=500, detail="AI chat failed")
+
+    # Save the user's message to MongoDB
+    await db.chat_messages.insert_one({
+        "meeting_id": meeting_id,
+        "user_id": clerk_user_id,
+        "role": "user",
+        "content": message,
+        "created_at": datetime.now(timezone.utc)
+    })
+
+    # Save Gemini's response to MongoDB
+    await db.chat_messages.insert_one({
+        "meeting_id": meeting_id,
+        "user_id": clerk_user_id,
+        "role": "assistant",
+        "content": ai_response,
+        "created_at": datetime.now(timezone.utc)
+    })
+
+    return {"response": ai_response}
+
+@router.get("/meetings/{meeting_id}/chat")
+async def get_chat_history(meeting_id: str, clerk_user_id: str):
+    db = get_db()
+
+    # Verify the user owns this meeting before returning chat history
+    try:
+        meeting = await db.meetings.find_one({
+            "_id": ObjectId(meeting_id),
+            "user_id": clerk_user_id
+        })
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid meeting ID")
+
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    # Fetch all chat messages oldest first
+    messages = await db.chat_messages.find(
+        {"meeting_id": meeting_id}
+    ).sort("created_at", 1).to_list(length=100)
+
+    # Convert MongoDB _id to string for each message
+    for msg in messages:
+        msg["id"] = str(msg["_id"])
+        del msg["_id"]
+
+    return messages

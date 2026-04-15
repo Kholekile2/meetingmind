@@ -1,11 +1,11 @@
 // This is the meeting detail page
-// It shows the full transcript, summary, action items, and key decisions for one meeting
+// It shows the full transcript, summary, action items, key decisions, and a chat interface
 
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import Navbar from "../../components/Navbar";
+import MeetingChat from "../../components/MeetingChat";
 
-// This function fetches a single meeting from our backend
 async function getMeeting(meetingId: string, userId: string) {
   try {
     const response = await fetch(
@@ -19,7 +19,19 @@ async function getMeeting(meetingId: string, userId: string) {
   }
 }
 
-// The [id] in the folder name becomes a param we can read here
+async function getChatHistory(meetingId: string, userId: string) {
+  try {
+    const response = await fetch(
+      `http://localhost:8000/meetings/${meetingId}/chat?clerk_user_id=${userId}`,
+      { cache: "no-store" }
+    );
+    if (!response.ok) return [];
+    return await response.json();
+  } catch {
+    return [];
+  }
+}
+
 export default async function MeetingDetailPage({
   params,
 }: {
@@ -28,7 +40,6 @@ export default async function MeetingDetailPage({
   const { userId } = await auth();
   if (!userId) redirect("/sign-in");
 
-  // Await params before accessing its properties
   const { id } = await params;
   const meeting = await getMeeting(id, userId);
 
@@ -42,6 +53,8 @@ export default async function MeetingDetailPage({
       </div>
     );
   }
+
+  const chatHistory = await getChatHistory(id, userId);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -57,7 +70,6 @@ export default async function MeetingDetailPage({
               year: "numeric", month: "long", day: "numeric"
             })}
           </p>
-          {/* Status badge */}
           <span className={`inline-block mt-2 text-xs px-2 py-1 rounded-full font-medium ${
             meeting.status === "completed"
               ? "bg-green-100 text-green-700"
@@ -69,34 +81,25 @@ export default async function MeetingDetailPage({
           </span>
         </div>
 
-        {/* Summary section */}
+        {/* Summary */}
         {meeting.summary && (
           <section className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <h2 className="text-lg font-semibold text-gray-800 mb-3">
-              Summary
-            </h2>
+            <h2 className="text-lg font-semibold text-gray-800 mb-3">Summary</h2>
             <p className="text-gray-600 text-sm leading-relaxed whitespace-pre-line">
               {meeting.summary}
             </p>
           </section>
         )}
 
-        {/* Action items section */}
+        {/* Action items */}
         {meeting.action_items && meeting.action_items.length > 0 && (
           <section className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <h2 className="text-lg font-semibold text-gray-800 mb-4">
-              Action Items
-            </h2>
+            <h2 className="text-lg font-semibold text-gray-800 mb-4">Action Items</h2>
             <div className="space-y-3">
               {meeting.action_items.map((item: any, index: number) => (
-                <div
-                  key={index}
-                  className="flex items-start gap-4 p-3 bg-blue-50 rounded-lg"
-                >
+                <div key={index} className="flex items-start gap-4 p-3 bg-blue-50 rounded-lg">
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-800">
-                      {item.task}
-                    </p>
+                    <p className="text-sm font-medium text-gray-800">{item.task}</p>
                     <p className="text-xs text-gray-500 mt-1">
                       Owner: {item.owner}
                       {item.due_date && ` · Due: ${item.due_date}`}
@@ -108,12 +111,10 @@ export default async function MeetingDetailPage({
           </section>
         )}
 
-        {/* Key decisions section */}
+        {/* Key decisions */}
         {meeting.key_decisions && meeting.key_decisions.length > 0 && (
           <section className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <h2 className="text-lg font-semibold text-gray-800 mb-4">
-              Key Decisions
-            </h2>
+            <h2 className="text-lg font-semibold text-gray-800 mb-4">Key Decisions</h2>
             <ul className="space-y-2">
               {meeting.key_decisions.map((decision: string, index: number) => (
                 <li key={index} className="flex items-start gap-2 text-sm text-gray-600">
@@ -125,12 +126,22 @@ export default async function MeetingDetailPage({
           </section>
         )}
 
-        {/* Transcript section */}
+        {/* Chat with meeting */}
+        <section className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">
+            Chat with this Meeting
+          </h2>
+          <MeetingChat
+            meetingId={id}
+            userId={userId}
+            initialMessages={chatHistory}
+          />
+        </section>
+
+        {/* Transcript */}
         {meeting.transcript && (
           <section className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <h2 className="text-lg font-semibold text-gray-800 mb-3">
-              Transcript
-            </h2>
+            <h2 className="text-lg font-semibold text-gray-800 mb-3">Transcript</h2>
             <p className="text-gray-600 text-sm leading-relaxed whitespace-pre-line font-mono">
               {meeting.transcript}
             </p>
