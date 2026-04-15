@@ -1,11 +1,14 @@
 // This is the meeting detail page
 // It shows the full transcript, summary, action items, key decisions, and a chat interface
+// It also has a delete button that removes the meeting and all its data
 
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import Navbar from "../../components/Navbar";
 import MeetingChat from "../../components/MeetingChat";
+import DeleteMeetingButton from "../../components/DeleteMeetingButton";
 
+// Fetches a single meeting from the backend
 async function getMeeting(meetingId: string, userId: string) {
   try {
     const response = await fetch(
@@ -19,6 +22,7 @@ async function getMeeting(meetingId: string, userId: string) {
   }
 }
 
+// Fetches the chat history for a meeting
 async function getChatHistory(meetingId: string, userId: string) {
   try {
     const response = await fetch(
@@ -62,23 +66,28 @@ export default async function MeetingDetailPage({
 
       <main className="max-w-4xl mx-auto px-6 py-10 space-y-8">
 
-        {/* Meeting title and date */}
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800">{meeting.title}</h1>
-          <p className="text-sm text-gray-400 mt-1">
-            {new Date(meeting.created_at).toLocaleDateString("en-ZA", {
-              year: "numeric", month: "long", day: "numeric"
-            })}
-          </p>
-          <span className={`inline-block mt-2 text-xs px-2 py-1 rounded-full font-medium ${
-            meeting.status === "completed"
-              ? "bg-green-100 text-green-700"
-              : meeting.status === "processing"
-              ? "bg-yellow-100 text-yellow-700"
-              : "bg-gray-100 text-gray-500"
-          }`}>
-            {meeting.status}
-          </span>
+        {/* Meeting title, date, status and delete button */}
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800">{meeting.title}</h1>
+            <p className="text-sm text-gray-400 mt-1">
+              {new Date(meeting.created_at).toLocaleDateString("en-ZA", {
+                year: "numeric", month: "long", day: "numeric"
+              })}
+            </p>
+            <span className={`inline-block mt-2 text-xs px-2 py-1 rounded-full font-medium ${
+              meeting.status === "completed"
+                ? "bg-green-100 text-green-700"
+                : meeting.status === "processing"
+                ? "bg-yellow-100 text-yellow-700"
+                : "bg-gray-100 text-gray-500"
+            }`}>
+              {meeting.status}
+            </span>
+          </div>
+
+          {/* Delete button component - handles confirmation and deletion */}
+          <DeleteMeetingButton meetingId={id} userId={userId} />
         </div>
 
         {/* Summary */}

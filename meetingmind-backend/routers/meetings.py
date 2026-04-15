@@ -259,3 +259,28 @@ async def get_chat_history(meeting_id: str, clerk_user_id: str):
         del msg["_id"]
 
     return messages
+
+@router.delete("/meetings/{meeting_id}")
+async def delete_meeting(meeting_id: str, clerk_user_id: str):
+    db = get_db()
+
+    # Make sure the meeting exists and belongs to this user
+    try:
+        meeting = await db.meetings.find_one({
+            "_id": ObjectId(meeting_id),
+            "user_id": clerk_user_id
+        })
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid meeting ID")
+
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    # Delete the meeting document from MongoDB
+    await db.meetings.delete_one({"_id": ObjectId(meeting_id)})
+
+    # Also delete all chat messages for this meeting
+    # We don't want orphaned messages left in the database
+    await db.chat_messages.delete_many({"meeting_id": meeting_id})
+
+    return {"message": "Meeting deleted successfully"}
