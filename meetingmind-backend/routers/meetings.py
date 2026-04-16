@@ -14,21 +14,17 @@ import asyncio
 
 router = APIRouter()
 
-# Configure Cloudinary using our environment variables
-cloudinary.config(
-    cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
-    api_key=os.getenv("CLOUDINARY_API_KEY"),
-    api_secret=os.getenv("CLOUDINARY_API_SECRET")
-)
-
 def format_meeting(meeting: dict) -> dict:
     # Convert MongoDB's _id object to a plain string called id
     meeting["id"] = str(meeting["_id"])
     del meeting["_id"]
     return meeting
 
-async def process_meeting_ai(meeting_id: str, transcript: str):
+async def process_meeting_ai(meeting_id: str, transcript: str = "", audio_bytes: bytes = None, mime_type: str = ""):
     # This function runs in the background after a meeting is uploaded
+    # If audio was uploaded, it first transcribes it then analyses the transcript
+    # If text was pasted, it analyses the transcript directly
+
     db = get_db()
 
     try:
@@ -38,7 +34,23 @@ async def process_meeting_ai(meeting_id: str, transcript: str):
             {"$set": {"status": "processing"}}
         )
 
-        # Send transcript to Gemini and get back summary, action items, key decisions
+        # If audio bytes were provided, transcribe them first
+        if audio_bytes:
+            print(f"Transcribing audio for meeting {meeting_id}")
+            from ai_processor import transcribe_audio
+            transcript = await transcribe_audio(audio_bytes, mime_type)
+
+            if not transcript:
+                raise Exception("Audio transcription returned empty result")
+
+            # Save the transcript to MongoDB so users can read it
+            await db.meetings.update_one(
+                {"_id": ObjectId(meeting_id)},
+                {"$set": {"transcript": transcript}}
+            )
+            print(f"Audio transcribed for meeting {meeting_id}")
+
+        # Now analyse the transcript with Gemini
         ai_result = await process_transcript(transcript)
 
         # Save the AI results to MongoDB and mark as completed
@@ -83,6 +95,12 @@ async def upload_meeting(
     audio_url = None
 
     if audio_file:
+        # Configure Cloudinary here so environment variables are already loaded
+        cloudinary.config(
+            cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
+            api_key=os.getenv("CLOUDINARY_API_KEY"),
+            api_secret=os.getenv("CLOUDINARY_API_SECRET")
+        )
         file_contents = await audio_file.read()
         upload_result = cloudinary.uploader.upload(
             file_contents,
@@ -107,11 +125,22 @@ async def upload_meeting(
     result = await db.meetings.insert_one(meeting)
     meeting_id = str(result.inserted_id)
 
-    transcript_to_process = transcript or ""
-
     # Start AI processing in the background
-    if transcript_to_process:
-        asyncio.create_task(process_meeting_ai(meeting_id, transcript_to_process))
+    # For audio uploads we pass the raw bytes and mime type for transcription
+    # For text uploads we pass the transcript directly
+    if audio_file and audio_url:
+        # Re-read the file bytes for transcription
+        # We need to read them again because we already read them for Cloudinary
+        audio_file.file.seek(0)
+        audio_bytes = await audio_file.read()
+        mime_type = audio_file.content_type or "audio/mpeg"
+        asyncio.create_task(
+            process_meeting_ai(meeting_id, audio_bytes=audio_bytes, mime_type=mime_type)
+        )
+    elif transcript:
+        asyncio.create_task(
+            process_meeting_ai(meeting_id, transcript=transcript)
+        )
 
     return {
         "message": "Meeting uploaded successfully",

@@ -6,16 +6,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from database import connect_db, close_db
 from routers import webhooks, meetings
+import os
 
 # Load environment variables from .env file
 load_dotenv()
 
 app = FastAPI(title="MeetingMind API")
 
-# Allow our Next.js frontend (localhost:3000) to make requests to this backend
+# Read allowed origins from environment variable
+# In development this is http://localhost:3000
+# In production this will be our Vercel URL
+origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+
+# Allow our Next.js frontend to make requests to this backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
