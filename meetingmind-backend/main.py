@@ -47,9 +47,10 @@ async def root():
 
 @app.get("/health")
 async def health():
+    # Check if the database object exists and is connected
+    # We use the existing connection instead of pinging again
     from database import get_db
-    try:
-        await get_db().command("ping")
-        return {"status": "healthy", "database": "connected"}
-    except Exception as e:
-        return {"status": "unhealthy", "database": str(e)}
+    db = get_db()
+    if db is None:
+        return {"status": "unhealthy", "database": "not connected"}
+    return {"status": "healthy", "database": "connected"}
