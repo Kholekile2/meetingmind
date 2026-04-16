@@ -70,7 +70,7 @@ export default function UploadPage() {
       }
 
       // Send the form data to our FastAPI backend
-      const response = await fetch("http://localhost:8000/meetings/upload", {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/meetings/upload`, {
         method: "POST",
         body: formData,
       });

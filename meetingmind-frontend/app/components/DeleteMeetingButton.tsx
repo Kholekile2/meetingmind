@@ -28,7 +28,7 @@ export default function DeleteMeetingButton({ meetingId, userId }: Props) {
     try {
       // Send a DELETE request to our FastAPI backend
       const response = await fetch(
-        `http://localhost:8000/meetings/${meetingId}?clerk_user_id=${userId}`,
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/meetings/${meetingId}?clerk_user_id=${userId}`,
         { method: "DELETE" }
       );
 

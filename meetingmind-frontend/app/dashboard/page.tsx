@@ -11,7 +11,7 @@ import Navbar from "../components/Navbar";
 async function getMeetings(userId: string) {
   try {
     const response = await fetch(
-      `http://localhost:8000/meetings?clerk_user_id=${userId}`,
+      `${process.env.NEXT_PUBLIC_BACKEND_URL}/meetings?clerk_user_id=${userId}`,
       // no-store means Next.js always fetches fresh data instead of using a cached version
       { cache: "no-store" }
     );

@@ -53,7 +53,7 @@ export default function MeetingChat({ meetingId, userId, initialMessages }: Prop
       formData.append("message", userMessage);
 
       const response = await fetch(
-        `http://localhost:8000/meetings/${meetingId}/chat`,
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/meetings/${meetingId}/chat`,
         { method: "POST", body: formData }
       );
 

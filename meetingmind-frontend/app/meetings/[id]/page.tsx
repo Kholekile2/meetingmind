@@ -12,7 +12,7 @@ import DeleteMeetingButton from "../../components/DeleteMeetingButton";
 async function getMeeting(meetingId: string, userId: string) {
   try {
     const response = await fetch(
-      `http://localhost:8000/meetings/${meetingId}?clerk_user_id=${userId}`,
+      `${process.env.NEXT_PUBLIC_BACKEND_URL}/meetings/${meetingId}?clerk_user_id=${userId}`,
       { cache: "no-store" }
     );
     if (!response.ok) return null;
@@ -26,7 +26,7 @@ async function getMeeting(meetingId: string, userId: string) {
 async function getChatHistory(meetingId: string, userId: string) {
   try {
     const response = await fetch(
-      `http://localhost:8000/meetings/${meetingId}/chat?clerk_user_id=${userId}`,
+      `${process.env.NEXT_PUBLIC_BACKEND_URL}/meetings/${meetingId}/chat?clerk_user_id=${userId}`,
       { cache: "no-store" }
     );
     if (!response.ok) return [];
