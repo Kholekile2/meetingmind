@@ -3,6 +3,9 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "python -m uvicorn main:app --host 0.0.0.0 --port $PORT"
+    "startCommand": "python -m uvicorn main:app --host 0.0.0.0 --port $PORT",
+    "envs": {
+      "ALLOWED_ORIGINS": "https://meetingmind-sigma.vercel.app,http://localhost:3000"
+    }
   }
 }
