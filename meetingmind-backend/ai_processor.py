@@ -43,7 +43,7 @@ async def transcribe_audio(audio_bytes: bytes, mime_type: str) -> str:
         for attempt in range(3):
             try:
                 response = client.models.generate_content(
-                    model="models/gemini-2.5-flash",
+                    model="models/gemini-2.0-flash",
                     contents=[
                         "Please transcribe this audio recording accurately. Include speaker names if you can identify them. Return only the transcript text, nothing else.",
                         uploaded_file
@@ -95,7 +95,7 @@ Meeting transcript:
     for attempt in range(3):
         try:
             response = client.models.generate_content(
-                model="models/gemini-2.5-flash",
+                model="models/gemini-2.0-flash",
                 contents=prompt
             )
 
