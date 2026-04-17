@@ -42,17 +42,20 @@ async def clerk_webhook(request: Request):
         last_name = data.get("last_name", "")
         name = f"{first_name} {last_name}".strip()
 
-        db = get_db()
+        try:
+            db = get_db()
 
-        # Only save the user if they don't already exist in MongoDB
-        existing_user = await db.users.find_one({"clerk_id": clerk_id})
-        if not existing_user:
-            await db.users.insert_one({
-                "clerk_id": clerk_id,
-                "email": email,
-                "name": name,
-                "created_at": data.get("created_at")
-            })
-            print(f"New user saved: {email}")
+            # Only save the user if they don't already exist in MongoDB
+            existing_user = await db.users.find_one({"clerk_id": clerk_id})
+            if not existing_user:
+                await db.users.insert_one({
+                    "clerk_id": clerk_id,
+                    "email": email,
+                    "name": name,
+                    "created_at": data.get("created_at")
+                })
+                print(f"New user saved: {email}")
+        except Exception as e:
+            print(f"Failed to save user to MongoDB: {e}")
 
     return {"status": "ok"}
