@@ -13,13 +13,22 @@ async def connect_db():
     # os.getenv reads secret values from our .env file
     mongodb_url = os.getenv("MONGODB_URL")
 
-    # Add tlsVersion to the connection string to fix SSL issues on Python 3.14
-    if "?" in mongodb_url:
-        mongodb_url += "&tlsVersion=TLS1_2"
-    else:
-        mongodb_url += "?tlsVersion=TLS1_2"
+    # Add SSL settings to fix SSL handshake issues on Railway and local Python 3.11+
+    if "tlsAllowInvalidCertificates" not in mongodb_url:
+        if "?" in mongodb_url:
+            mongodb_url += "&tlsAllowInvalidCertificates=true"
+        else:
+            mongodb_url += "?tlsAllowInvalidCertificates=true"
 
-    mongo_client = AsyncIOMotorClient(mongodb_url)
+    mongo_client = AsyncIOMotorClient(
+        mongodb_url,
+        # These settings help maintain stable connections on cloud platforms
+        serverSelectionTimeoutMS=30000,
+        connectTimeoutMS=30000,
+        socketTimeoutMS=30000,
+        maxPoolSize=10,
+        retryWrites=True,
+    )
     db = mongo_client[os.getenv("DB_NAME")]
     print("Connected to MongoDB Atlas")
 
