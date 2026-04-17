@@ -1,24 +1,17 @@
 # This file handles all AI processing using Google Gemini
 # It handles both audio transcription and transcript analysis
-# For audio files: Gemini first transcribes the audio, then analyses the transcript
-# For text transcripts: Gemini analyses the transcript directly
 
 from google import genai
-from google.genai import types
 import os
 import json
-import tempfile
 import asyncio
+import tempfile
 
 async def transcribe_audio(audio_bytes: bytes, mime_type: str) -> str:
     # This function sends an audio file to Gemini and gets back a transcript
-    # We upload the file first then wait for it to become active before using it
     client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
     try:
-        import time
-        import asyncio
-
         # Write audio bytes to a temporary file so we can upload it to Gemini
         with tempfile.NamedTemporaryFile(delete=False, suffix=".audio") as tmp:
             tmp.write(audio_bytes)
@@ -33,13 +26,11 @@ async def transcribe_audio(audio_bytes: bytes, mime_type: str) -> str:
         print(f"File uploaded to Gemini with state: {uploaded_file.state}")
 
         # Wait for the file to become ACTIVE before using it
-        # Gemini needs time to process the uploaded file
-        max_wait = 60  # Maximum seconds to wait
+        max_wait = 60
         waited = 0
         while str(uploaded_file.state) != "FileState.ACTIVE" and waited < max_wait:
             print(f"Waiting for file to become active... current state: {uploaded_file.state}")
             await asyncio.sleep(3)
-            # Refresh the file status
             uploaded_file = client.files.get(name=uploaded_file.name)
             waited += 3
 
@@ -48,10 +39,8 @@ async def transcribe_audio(audio_bytes: bytes, mime_type: str) -> str:
 
         print(f"File is now active, transcribing...")
 
-        # Ask Gemini to transcribe the audio
-        # Retry up to 3 times in case Gemini is temporarily busy
-        max_retries = 3
-        for attempt in range(max_retries):
+        # Retry transcription up to 3 times
+        for attempt in range(3):
             try:
                 response = client.models.generate_content(
                     model="models/gemini-2.5-flash",
@@ -63,8 +52,7 @@ async def transcribe_audio(audio_bytes: bytes, mime_type: str) -> str:
                 return response.text.strip()
             except Exception as retry_error:
                 print(f"Transcription attempt {attempt + 1} failed: {retry_error}")
-                if attempt < max_retries - 1:
-                    # Wait a few seconds before retrying
+                if attempt < 2:
                     await asyncio.sleep(5)
                 else:
                     raise retry_error
@@ -75,7 +63,6 @@ async def transcribe_audio(audio_bytes: bytes, mime_type: str) -> str:
 
 async def process_transcript(transcript: str) -> dict:
     # This function sends a transcript to Gemini and gets back structured data
-    # It returns a summary, action items, and key decisions
     client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
     prompt = f"""
@@ -104,45 +91,39 @@ Meeting transcript:
 {transcript}
 """
 
-    try:
-        # Retry up to 3 times with a delay if Gemini is busy
-        max_retries = 3
-        last_error = None
+    # Retry up to 3 times with increasing delays if Gemini is busy
+    for attempt in range(3):
+        try:
+            response = client.models.generate_content(
+                model="models/gemini-2.5-flash",
+                contents=prompt
+            )
 
-        for attempt in range(max_retries):
-            try:
-                response = client.models.generate_content(
-                    model="models/gemini-2.5-flash",
-                    contents=prompt
-                )
-                # Get the text content from Gemini's response
-                response_text = response.text.strip()
+            response_text = response.text.strip()
 
-                # Sometimes Gemini wraps JSON in markdown code blocks - remove them if present
-                if response_text.startswith("```"):
-                    response_text = response_text.split("```")[1]
-                    if response_text.startswith("json"):
-                        response_text = response_text[4:]
+            # Remove markdown code blocks if Gemini added them
+            if response_text.startswith("```"):
+                response_text = response_text.split("```")[1]
+                if response_text.startswith("json"):
+                    response_text = response_text[4:]
 
-                # Parse the JSON string into a Python dictionary
-                result = json.loads(response_text)
+            result = json.loads(response_text)
 
+            return {
+                "summary": result.get("summary", ""),
+                "action_items": result.get("action_items", []),
+                "key_decisions": result.get("key_decisions", [])
+            }
+
+        except Exception as e:
+            print(f"Gemini attempt {attempt + 1} failed: {e}")
+            if attempt < 2:
+                # Wait longer each retry - 10s, then 20s
+                await asyncio.sleep(10 * (attempt + 1))
+            else:
+                print(f"Gemini processing error after 3 attempts: {e}")
                 return {
-                    "summary": result.get("summary", ""),
-                    "action_items": result.get("action_items", []),
-                    "key_decisions": result.get("key_decisions", [])
+                    "summary": "",
+                    "action_items": [],
+                    "key_decisions": []
                 }
-
-            except Exception as retry_error:
-                last_error = retry_error
-                print(f"Gemini attempt {attempt + 1} failed: {retry_error}")
-                if attempt < max_retries - 1:
-                    # Wait before retrying - longer wait each time
-                    await asyncio.sleep(10 * (attempt + 1))
-
-        print(f"Gemini processing error after {max_retries} attempts: {last_error}")
-        return {
-            "summary": "",
-            "action_items": [],
-            "key_decisions": []
-        }
