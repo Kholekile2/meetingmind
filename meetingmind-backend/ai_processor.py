@@ -8,6 +8,7 @@ from google.genai import types
 import os
 import json
 import tempfile
+import asyncio
 
 async def transcribe_audio(audio_bytes: bytes, mime_type: str) -> str:
     # This function sends an audio file to Gemini and gets back a transcript
@@ -104,32 +105,42 @@ Meeting transcript:
 """
 
     try:
-        # Send the prompt to Gemini and wait for the response
-        response = client.models.generate_content(
-            model="models/gemini-2.5-flash",
-            contents=prompt
-        )
+        # Retry up to 3 times with a delay if Gemini is busy
+        max_retries = 3
+        last_error = None
 
-        # Get the text content from Gemini's response
-        response_text = response.text.strip()
+        for attempt in range(max_retries):
+            try:
+                response = client.models.generate_content(
+                    model="models/gemini-2.5-flash",
+                    contents=prompt
+                )
+                # Get the text content from Gemini's response
+                response_text = response.text.strip()
 
-        # Sometimes Gemini wraps JSON in markdown code blocks - remove them if present
-        if response_text.startswith("```"):
-            response_text = response_text.split("```")[1]
-            if response_text.startswith("json"):
-                response_text = response_text[4:]
+                # Sometimes Gemini wraps JSON in markdown code blocks - remove them if present
+                if response_text.startswith("```"):
+                    response_text = response_text.split("```")[1]
+                    if response_text.startswith("json"):
+                        response_text = response_text[4:]
 
-        # Parse the JSON string into a Python dictionary
-        result = json.loads(response_text)
+                # Parse the JSON string into a Python dictionary
+                result = json.loads(response_text)
 
-        return {
-            "summary": result.get("summary", ""),
-            "action_items": result.get("action_items", []),
-            "key_decisions": result.get("key_decisions", [])
-        }
+                return {
+                    "summary": result.get("summary", ""),
+                    "action_items": result.get("action_items", []),
+                    "key_decisions": result.get("key_decisions", [])
+                }
 
-    except Exception as e:
-        print(f"Gemini processing error: {e}")
+            except Exception as retry_error:
+                last_error = retry_error
+                print(f"Gemini attempt {attempt + 1} failed: {retry_error}")
+                if attempt < max_retries - 1:
+                    # Wait before retrying - longer wait each time
+                    await asyncio.sleep(10 * (attempt + 1))
+
+        print(f"Gemini processing error after {max_retries} attempts: {last_error}")
         return {
             "summary": "",
             "action_items": [],
