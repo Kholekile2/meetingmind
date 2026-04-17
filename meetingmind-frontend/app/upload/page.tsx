@@ -30,6 +30,12 @@ export default function UploadPage() {
   // Store the pasted transcript text
   const [transcript, setTranscript] = useState("");
 
+  // Track whether transcript input is pasted text or an uploaded document
+  const [transcriptInputType, setTranscriptInputType] = useState<"paste" | "document">("paste");
+
+  // Store the selected transcript document
+  const [transcriptFile, setTranscriptFile] = useState<File | null>(null);
+
   // Track whether we are currently uploading
   const [loading, setLoading] = useState(false);
 
@@ -50,9 +56,16 @@ export default function UploadPage() {
       setError("Please select an audio file");
       return;
     }
-    if (uploadType === "text" && !transcript.trim()) {
-      setError("Please paste a transcript");
-      return;
+    if (uploadType === "text") {
+      if (transcriptInputType === "paste" && !transcript.trim()) {
+        setError("Please paste a transcript");
+        return;
+      }
+
+      if (transcriptInputType === "document" && !transcriptFile) {
+        setError("Please select a transcript document");
+        return;
+      }
     }
 
     setLoading(true);
@@ -66,7 +79,11 @@ export default function UploadPage() {
       if (uploadType === "audio" && audioFile) {
         formData.append("audio_file", audioFile);
       } else {
-        formData.append("transcript", transcript);
+        if (transcriptInputType === "document" && transcriptFile) {
+          formData.append("transcript_file", transcriptFile);
+        } else {
+          formData.append("transcript", transcript);
+        }
       }
 
       // Send the form data to our FastAPI backend
@@ -112,7 +129,7 @@ export default function UploadPage() {
             Upload a Meeting
           </h1>
           <p className="text-gray-400 text-sm mb-8">
-            Upload an audio recording or paste a transcript
+            Upload an audio recording, paste a transcript, or upload a transcript document
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -178,16 +195,60 @@ export default function UploadPage() {
             {/* Text transcript input - only shown when text paste is selected */}
             {uploadType === "text" && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Paste Transcript
-                </label>
-                <textarea
-                  value={transcript}
-                  onChange={(e) => setTranscript(e.target.value)}
-                  rows={10}
-                  placeholder="Paste your meeting transcript here..."
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                />
+                <div className="flex gap-3 mb-3">
+                  <button
+                    type="button"
+                    onClick={() => setTranscriptInputType("paste")}
+                    className={`flex-1 py-2.5 rounded-lg text-sm font-medium border transition ${
+                      transcriptInputType === "paste"
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-gray-600 border-gray-300 hover:border-blue-300"
+                    }`}
+                  >
+                    Paste Transcript
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTranscriptInputType("document")}
+                    className={`flex-1 py-2.5 rounded-lg text-sm font-medium border transition ${
+                      transcriptInputType === "document"
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-gray-600 border-gray-300 hover:border-blue-300"
+                    }`}
+                  >
+                    Upload Document
+                  </button>
+                </div>
+
+                {transcriptInputType === "paste" ? (
+                  <>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Paste Transcript
+                    </label>
+                    <textarea
+                      value={transcript}
+                      onChange={(e) => setTranscript(e.target.value)}
+                      rows={10}
+                      placeholder="Paste your meeting transcript here..."
+                      className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Transcript Document
+                    </label>
+                    <p className="text-xs text-gray-400 mb-2">
+                      Supported formats: txt, md, csv, rtf, docx
+                    </p>
+                    <input
+                      type="file"
+                      accept=".txt,.md,.csv,.rtf,.docx"
+                      onChange={(e) => setTranscriptFile(e.target.files?.[0] || null)}
+                      className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                    />
+                  </>
+                )}
               </div>
             )}
 

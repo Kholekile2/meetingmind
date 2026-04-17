@@ -11,8 +11,47 @@ import cloudinary
 import cloudinary.uploader
 import os
 import asyncio
+import io
+from pathlib import Path
+from zipfile import ZipFile
+from xml.etree import ElementTree as ET
 
 router = APIRouter()
+
+def extract_transcript_from_document(file_bytes: bytes, filename: str) -> str:
+    suffix = Path(filename or "").suffix.lower()
+
+    if suffix in {".txt", ".md", ".csv", ".rtf", ".log"}:
+        # Try common encodings in order to support most exported transcript files.
+        for encoding in ("utf-8", "utf-16", "latin-1"):
+            try:
+                return file_bytes.decode(encoding).strip()
+            except UnicodeDecodeError:
+                continue
+        return ""
+
+    if suffix == ".docx":
+        try:
+            with ZipFile(io.BytesIO(file_bytes)) as zf:
+                document_xml = zf.read("word/document.xml")
+
+            root = ET.fromstring(document_xml)
+            namespace = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+            paragraphs = []
+
+            for paragraph in root.iter(f"{namespace}p"):
+                text_parts = [node.text for node in paragraph.iter(f"{namespace}t") if node.text]
+                if text_parts:
+                    paragraphs.append("".join(text_parts))
+
+            return "\n".join(paragraphs).strip()
+        except Exception:
+            return ""
+
+    raise HTTPException(
+        status_code=400,
+        detail="Unsupported transcript document type. Please upload txt, md, csv, rtf, or docx."
+    )
 
 def format_meeting(meeting: dict) -> dict:
     # Convert MongoDB's _id object to a plain string called id
@@ -78,11 +117,18 @@ async def upload_meeting(
     title: str = Form(...),
     audio_file: Optional[UploadFile] = File(None),
     transcript: Optional[str] = Form(None),
+    transcript_file: Optional[UploadFile] = File(None),
 ):
-    if not audio_file and not transcript:
+    if not audio_file and not transcript and not transcript_file:
         raise HTTPException(
             status_code=400,
-            detail="Please provide either an audio file or a transcript"
+            detail="Please provide an audio file, transcript text, or transcript document"
+        )
+
+    if audio_file and (transcript or transcript_file):
+        raise HTTPException(
+            status_code=400,
+            detail="Please upload either audio or transcript input, not both"
         )
 
     db = get_db()
@@ -93,6 +139,19 @@ async def upload_meeting(
         raise HTTPException(status_code=404, detail="User not found")
 
     audio_url = None
+
+    if transcript_file and not transcript:
+        transcript_bytes = await transcript_file.read()
+        transcript = extract_transcript_from_document(
+            transcript_bytes,
+            transcript_file.filename or ""
+        )
+
+        if not transcript:
+            raise HTTPException(
+                status_code=400,
+                detail="Could not extract text from transcript document"
+            )
 
     if audio_file:
         # Configure Cloudinary here so environment variables are already loaded

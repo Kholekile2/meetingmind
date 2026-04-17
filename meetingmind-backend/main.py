@@ -17,6 +17,7 @@ app = FastAPI(title="MeetingMind API")
 # In development this is http://localhost:3000
 # In production this will be our Vercel URL
 origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+print(f"Allowed origins: {origins}")
 
 # Allow our Next.js frontend to make requests to this backend
 app.add_middleware(
