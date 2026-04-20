@@ -1,72 +1,49 @@
-# This file handles all AI processing using Google Gemini
+# This file handles all AI processing using OpenAI
 # It handles both audio transcription and transcript analysis
+# For audio files: OpenAI Whisper transcribes the audio, then GPT-4o-mini analyses it
+# For text transcripts: GPT-4o-mini analyses the transcript directly
 
-from google import genai
+from openai import OpenAI
 import os
 import json
-import asyncio
 import tempfile
 
+def get_client():
+    # Create OpenAI client using our API key from environment variables
+    return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
 async def transcribe_audio(audio_bytes: bytes, mime_type: str) -> str:
-    # This function sends an audio file to Gemini and gets back a transcript
-    client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+    # This function sends an audio file to OpenAI Whisper and gets back a transcript
+    # Whisper is OpenAI's dedicated audio transcription model
+    client = get_client()
 
     try:
-        # Write audio bytes to a temporary file so we can upload it to Gemini
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".audio") as tmp:
+        # Write audio bytes to a temporary file because OpenAI needs a file object
+        suffix = ".mp4" if "mp4" in mime_type else ".m4a" if "m4a" in mime_type else ".mp3"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             tmp.write(audio_bytes)
             tmp_path = tmp.name
 
-        # Upload the file to Gemini's file API
-        uploaded_file = client.files.upload(
-            file=tmp_path,
-            config={"mime_type": mime_type}
-        )
+        # Send to OpenAI Whisper for transcription
+        with open(tmp_path, "rb") as audio_file:
+            transcript = client.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_file,
+            )
 
-        print(f"File uploaded to Gemini with state: {uploaded_file.state}")
-
-        # Wait for the file to become ACTIVE before using it
-        max_wait = 60
-        waited = 0
-        while str(uploaded_file.state) != "FileState.ACTIVE" and waited < max_wait:
-            print(f"Waiting for file to become active... current state: {uploaded_file.state}")
-            await asyncio.sleep(3)
-            uploaded_file = client.files.get(name=uploaded_file.name)
-            waited += 3
-
-        if str(uploaded_file.state) != "FileState.ACTIVE":
-            raise Exception(f"File never became active, final state: {uploaded_file.state}")
-
-        print(f"File is now active, transcribing...")
-
-        # Retry transcription up to 3 times
-        for attempt in range(3):
-            try:
-                response = client.models.generate_content(
-                    model="models/gemini-2.0-flash",
-                    contents=[
-                        "Please transcribe this audio recording accurately. Include speaker names if you can identify them. Return only the transcript text, nothing else.",
-                        uploaded_file
-                    ]
-                )
-                return response.text.strip()
-            except Exception as retry_error:
-                print(f"Transcription attempt {attempt + 1} failed: {retry_error}")
-                if attempt < 2:
-                    await asyncio.sleep(5)
-                else:
-                    raise retry_error
+        print(f"Audio transcribed successfully")
+        return transcript.text
 
     except Exception as e:
         print(f"Audio transcription error: {e}")
         return ""
 
 async def process_transcript(transcript: str) -> dict:
-    # This function sends a transcript to Gemini and gets back structured data
-    client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+    # This function sends a transcript to GPT-4o-mini and gets back structured data
+    # It returns a summary, action items, and key decisions
+    client = get_client()
 
-    prompt = f"""
-You are an AI assistant that analyses meeting transcripts.
+    prompt = f"""You are an AI assistant that analyses meeting transcripts.
 
 Given the following meeting transcript, extract and return a JSON object with exactly these fields:
 
@@ -88,42 +65,35 @@ Important rules:
 - Keep the summary clear and professional
 
 Meeting transcript:
-{transcript}
-"""
+{transcript}"""
 
-    # Retry up to 3 times with increasing delays if Gemini is busy
-    for attempt in range(3):
-        try:
-            response = client.models.generate_content(
-                model="models/gemini-2.0-flash",
-                contents=prompt
-            )
+    try:
+        # Send to GPT-4o-mini - fast, cheap, and reliable
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            # response_format forces OpenAI to return valid JSON every time
+            response_format={"type": "json_object"}
+        )
 
-            response_text = response.text.strip()
+        # Extract the response text
+        response_text = response.choices[0].message.content.strip()
 
-            # Remove markdown code blocks if Gemini added them
-            if response_text.startswith("```"):
-                response_text = response_text.split("```")[1]
-                if response_text.startswith("json"):
-                    response_text = response_text[4:]
+        # Parse the JSON into a Python dictionary
+        result = json.loads(response_text)
 
-            result = json.loads(response_text)
+        return {
+            "summary": result.get("summary", ""),
+            "action_items": result.get("action_items", []),
+            "key_decisions": result.get("key_decisions", [])
+        }
 
-            return {
-                "summary": result.get("summary", ""),
-                "action_items": result.get("action_items", []),
-                "key_decisions": result.get("key_decisions", [])
-            }
-
-        except Exception as e:
-            print(f"Gemini attempt {attempt + 1} failed: {e}")
-            if attempt < 2:
-                # Wait longer each retry - 10s, then 20s
-                await asyncio.sleep(10 * (attempt + 1))
-            else:
-                print(f"Gemini processing error after 3 attempts: {e}")
-                return {
-                    "summary": "",
-                    "action_items": [],
-                    "key_decisions": []
-                }
+    except Exception as e:
+        print(f"OpenAI processing error: {e}")
+        return {
+            "summary": "",
+            "action_items": [],
+            "key_decisions": []
+        }

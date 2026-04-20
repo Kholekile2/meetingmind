@@ -28,7 +28,7 @@ export default function MeetingChat({ meetingId, userId, initialMessages }: Prop
   // input holds what the user is currently typing
   const [input, setInput] = useState("");
 
-  // loading is true while we are waiting for Gemini to respond
+  // loading is true while we are waiting for the AI to respond
   const [loading, setLoading] = useState(false);
 
   async function handleSend() {
@@ -63,7 +63,7 @@ export default function MeetingChat({ meetingId, userId, initialMessages }: Prop
         throw new Error(data.detail || "Chat failed");
       }
 
-      // Add Gemini's response to the UI
+      // Add the AI response to the UI
       setMessages(prev => [...prev, { role: "assistant", content: data.response }]);
 
     } catch (err: any) {
@@ -115,7 +115,7 @@ export default function MeetingChat({ meetingId, userId, initialMessages }: Prop
           ))
         )}
 
-        {/* Show a typing indicator while waiting for Gemini */}
+        {/* Show a typing indicator while waiting for AI */}
         {loading && (
           <div className="flex justify-start">
             <div className="bg-gray-100 text-gray-500 px-4 py-2 rounded-2xl rounded-bl-sm text-sm">

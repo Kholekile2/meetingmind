@@ -89,7 +89,7 @@ async def process_meeting_ai(meeting_id: str, transcript: str = "", audio_bytes:
             )
             print(f"Audio transcribed for meeting {meeting_id}")
 
-        # Now analyse the transcript with Gemini
+        # Now analyse the transcript with AI
         ai_result = await process_transcript(transcript)
 
         # Save the AI results to MongoDB and mark as completed
@@ -247,7 +247,7 @@ async def chat_with_meeting(
 ):
     db = get_db()
 
-    # Fetch the meeting to get the transcript as context for Gemini
+    # Fetch the meeting to get the transcript as context for AI
     try:
         meeting = await db.meetings.find_one({
             "_id": ObjectId(meeting_id),
@@ -262,7 +262,7 @@ async def chat_with_meeting(
     if not meeting.get("transcript"):
         raise HTTPException(status_code=400, detail="Meeting has no transcript to chat with")
 
-    # Fetch previous chat messages to give Gemini conversation context
+    # Fetch previous chat messages to provide conversation context
     previous_messages = await db.chat_messages.find(
         {"meeting_id": meeting_id}
     ).sort("created_at", 1).to_list(length=20)
@@ -289,13 +289,16 @@ User question: {message}
 Answer the question clearly and concisely based on the transcript."""
 
     try:
-        from google import genai
-        client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-        response = client.models.generate_content(
-            model="models/gemini-2.5-flash",
-            contents=prompt
+        # Use OpenAI GPT-4o-mini for chat responses
+        from openai import OpenAI
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "user", "content": prompt}
+            ]
         )
-        ai_response = response.text.strip()
+        ai_response = response.choices[0].message.content.strip()
     except Exception as e:
         print(f"Chat error: {e}")
         raise HTTPException(status_code=500, detail="AI chat failed")
@@ -309,7 +312,7 @@ Answer the question clearly and concisely based on the transcript."""
         "created_at": datetime.now(timezone.utc)
     })
 
-    # Save Gemini's response to MongoDB
+    # Save AI response to MongoDB
     await db.chat_messages.insert_one({
         "meeting_id": meeting_id,
         "user_id": clerk_user_id,

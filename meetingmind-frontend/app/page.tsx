@@ -104,7 +104,7 @@ export default async function LandingPage() {
 
       {/* Footer */}
       <footer className="text-center py-8 text-sm text-gray-400">
-        Built with Next.js, FastAPI, MongoDB, and Google Gemini
+        Built with Next.js, FastAPI, MongoDB, and OpenAI
       </footer>
 
     </div>
