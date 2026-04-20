@@ -289,16 +289,17 @@ User question: {message}
 Answer the question clearly and concisely based on the transcript."""
 
     try:
-        # Use OpenAI GPT-4o-mini for chat responses
-        from openai import OpenAI
-        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
+        # Use Claude Haiku for chat responses - fast and reliable
+        import anthropic
+        client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=1024,
             messages=[
                 {"role": "user", "content": prompt}
             ]
         )
-        ai_response = response.choices[0].message.content.strip()
+        ai_response = response.content[0].text.strip()
     except Exception as e:
         print(f"Chat error: {e}")
         raise HTTPException(status_code=500, detail="AI chat failed")

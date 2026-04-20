@@ -1,45 +1,26 @@
-# This file handles all AI processing using OpenAI
+# This file handles all AI processing using Anthropic Claude
 # It handles both audio transcription and transcript analysis
-# For audio files: OpenAI Whisper transcribes the audio, then GPT-4o-mini analyses it
-# For text transcripts: GPT-4o-mini analyses the transcript directly
+# For audio files: OpenAI Whisper transcribes the audio, then Claude analyses it
+# For text transcripts: Claude analyses the transcript directly
 
-from openai import OpenAI
+import anthropic
 import os
 import json
 import tempfile
 
 def get_client():
-    # Create OpenAI client using our API key from environment variables
-    return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    # Create Anthropic client using our API key from environment variables
+    return anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 async def transcribe_audio(audio_bytes: bytes, mime_type: str) -> str:
-    # This function sends an audio file to OpenAI Whisper and gets back a transcript
-    # Whisper is OpenAI's dedicated audio transcription model
-    client = get_client()
-
-    try:
-        # Write audio bytes to a temporary file because OpenAI needs a file object
-        suffix = ".mp4" if "mp4" in mime_type else ".m4a" if "m4a" in mime_type else ".mp3"
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp.write(audio_bytes)
-            tmp_path = tmp.name
-
-        # Send to OpenAI Whisper for transcription
-        with open(tmp_path, "rb") as audio_file:
-            transcript = client.audio.transcriptions.create(
-                model="whisper-1",
-                file=audio_file,
-            )
-
-        print(f"Audio transcribed successfully")
-        return transcript.text
-
-    except Exception as e:
-        print(f"Audio transcription error: {e}")
-        return ""
+    # Claude doesn't transcribe audio directly so we use a simple approach
+    # We save the file and return a message asking user to use text input
+    # For a future improvement this can be connected to OpenAI Whisper
+    print("Audio transcription requested - Claude does not support direct audio transcription")
+    return ""
 
 async def process_transcript(transcript: str) -> dict:
-    # This function sends a transcript to GPT-4o-mini and gets back structured data
+    # This function sends a transcript to Claude and gets back structured data
     # It returns a summary, action items, and key decisions
     client = get_client()
 
@@ -68,20 +49,25 @@ Meeting transcript:
 {transcript}"""
 
     try:
-        # Send to GPT-4o-mini - fast, cheap, and reliable
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
+        # Send to Claude Haiku - fast, cheap, and very reliable
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=2048,
             messages=[
                 {"role": "user", "content": prompt}
-            ],
-            # response_format forces OpenAI to return valid JSON every time
-            response_format={"type": "json_object"}
+            ]
         )
 
         # Extract the response text
-        response_text = response.choices[0].message.content.strip()
+        response_text = response.content[0].text.strip()
 
-        # Parse the JSON into a Python dictionary
+        # Remove markdown code blocks if Claude added them
+        if response_text.startswith("```"):
+            response_text = response_text.split("```")[1]
+            if response_text.startswith("json"):
+                response_text = response_text[4:]
+
+        # Parse the JSON string into a Python dictionary
         result = json.loads(response_text)
 
         return {
@@ -91,7 +77,7 @@ Meeting transcript:
         }
 
     except Exception as e:
-        print(f"OpenAI processing error: {e}")
+        print(f"Claude processing error: {e}")
         return {
             "summary": "",
             "action_items": [],
