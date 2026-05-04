@@ -5,6 +5,9 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "MeetingMind",
   description: "AI-powered meeting summariser",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export default function RootLayout({
