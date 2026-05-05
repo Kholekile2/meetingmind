@@ -29,7 +29,7 @@ async def process_transcript(transcript: str) -> dict:
 Given the following meeting transcript, extract and return a JSON object with exactly these fields:
 
 {{
-  "summary": "A clear 2-3 paragraph summary of what the meeting was about",
+  "summary": "A detailed 3-4 paragraph summary covering the main topics discussed, decisions made, and outcomes of the meeting",
   "action_items": [
     {{"task": "description of the task", "owner": "person responsible", "due_date": "due date if mentioned or null"}}
   ],

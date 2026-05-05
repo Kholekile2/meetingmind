@@ -277,6 +277,7 @@ async def chat_with_meeting(
     prompt = f"""You are a helpful assistant that answers questions about a meeting.
 You must only answer based on the meeting transcript provided below.
 If the answer is not in the transcript, say so honestly.
+Do not use markdown formatting like headers, bold text, or bullet points. Write in plain conversational sentences only.
 
 Meeting transcript:
 {meeting['transcript']}
