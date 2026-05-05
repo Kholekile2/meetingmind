@@ -35,17 +35,56 @@ export default async function LandingPage() {
         </div>
       </nav>
 
-      {/* Hero section - the main headline and call to action buttons */}
-      <main className="max-w-4xl mx-auto px-8 py-24 text-center">
-        <h1 className="text-5xl font-bold text-gray-900 leading-tight mb-6">
-          Turn messy meetings into
-          <span className="text-blue-600"> clear, actionable notes</span>
+      {/* Hero section - shortened headline and features pulled up above CTAs */}
+      <main className="max-w-4xl mx-auto px-8 py-16 text-center">
+        <h1 className="text-5xl font-bold text-gray-900 leading-tight mb-4">
+          Make meetings <span className="text-blue-600">matter</span>
         </h1>
-        <p className="text-xl text-gray-500 mb-10 max-w-2xl mx-auto">
-          Upload a recording or paste a transcript. MeetingMind uses AI to generate
-          summaries, extract action items, identify key decisions, and let you
-          chat with your meeting.
+        <p className="text-lg text-gray-500 mb-6 max-w-2xl mx-auto">
+          AI summaries, action items, and key decisions—instantly.
         </p>
+
+        {/* Features grid moved up so it's visible immediately on load */}
+        {(() => {
+          const features = [
+            {
+              icon: "📝",
+              title: "AI Summaries",
+              description: "Get a clear 2-3 paragraph summary of every meeting automatically",
+            },
+            {
+              icon: "✅",
+              title: "Action Items",
+              description: "Never miss a task — AI extracts who is responsible and when it is due",
+            },
+            {
+              icon: "🎯",
+              title: "Key Decisions",
+              description: "See every important decision made in the meeting at a glance",
+            },
+            {
+              icon: "💬",
+              title: "Chat with Meetings",
+              description: "Ask questions about your meeting and get instant answers",
+            },
+          ];
+
+          return (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+              {features.map((feature) => (
+                <div
+                  key={feature.title}
+                  className="bg-white rounded-xl p-6 shadow-sm border border-gray-100"
+                >
+                  <div className="text-3xl mb-3">{feature.icon}</div>
+                  <h3 className="font-semibold text-gray-800 mb-2">{feature.title}</h3>
+                  <p className="text-sm text-gray-500 leading-relaxed">{feature.description}</p>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+
         <div className="flex items-center justify-center gap-4">
           <Link
             href="/sign-up"
@@ -62,45 +101,7 @@ export default async function LandingPage() {
         </div>
       </main>
 
-      {/* Features section - shows the four main features of the app */}
-      <section className="max-w-5xl mx-auto px-8 py-16">
-        <h2 className="text-2xl font-bold text-center text-gray-800 mb-12">
-          Everything you need from your meetings
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {[
-            {
-              icon: "📝",
-              title: "AI Summaries",
-              description: "Get a clear 2-3 paragraph summary of every meeting automatically"
-            },
-            {
-              icon: "✅",
-              title: "Action Items",
-              description: "Never miss a task — AI extracts who is responsible and when it is due"
-            },
-            {
-              icon: "🎯",
-              title: "Key Decisions",
-              description: "See every important decision made in the meeting at a glance"
-            },
-            {
-              icon: "💬",
-              title: "Chat with Meetings",
-              description: "Ask questions like what did we decide about the budget and get instant answers"
-            },
-          ].map((feature) => (
-            <div
-              key={feature.title}
-              className="bg-white rounded-xl p-6 shadow-sm border border-gray-100"
-            >
-              <div className="text-3xl mb-3">{feature.icon}</div>
-              <h3 className="font-semibold text-gray-800 mb-2">{feature.title}</h3>
-              <p className="text-sm text-gray-500 leading-relaxed">{feature.description}</p>
-            </div>
-          ))}
-        </div>
-      </section>
+      {/* Features were moved above the CTAs in the hero to surface them immediately */}
 
       {/* Footer */}
       <footer className="text-center py-8 text-sm text-gray-400">
